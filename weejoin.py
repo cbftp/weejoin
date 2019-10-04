@@ -3,7 +3,8 @@
 
 import json
 import re
-import urllib
+import urllib.parse
+import urllib.request
 import time
 
 import weechat as w
@@ -11,11 +12,11 @@ import weechat as w
 # Constant used to check if configs are required
 REQUIRED = '_required'
 
-w.register('weebullet',
-           'Lefty',
-           '0.5.1',
+w.register('weejoin',
+           'KittyKatt (Lefty for weebullet)',
+           '1.0',
            'BSD',
-           'weebullet pushes notifications from IRC to Pushbullet.',
+           'weejoin pushes notifications from IRC to Join.',
            '', '')
 
 w.hook_print("", "irc_privmsg", "", 1, "priv_msg_cb", "")
@@ -29,13 +30,13 @@ w.hook_command(
     "cmd_send_push_note", ""
 )
 w.hook_command(
-    "weebullet",
-    "pushes notifications from IRC to Pushbullet",
+    "weejoin",
+    "pushes notifications from IRC to Join",
     "[command]",
     "Available commands are:\n"
     "   help        : prints config options and defaults\n"
     "   listdevices : prints a list of all devices associated"
-    "                 with your Pushbullet API key\n"
+    "                 with your Join API key\n"
     "   listignores : prints a list of channels that highlights "
     "                 won't be pushed for\n"
     "   ignore      : adds a channel to the blacklist\n"
@@ -57,40 +58,41 @@ configs = {
 }
 
 last_notification = 0   # 0 seconds from the epoch
+# Icon used by Join for notification icon
+notification_icon = 'https://upload.wikimedia.org/wikipedia/commons/thumb/a/a3/Weechat_logo.png/64px-Weechat_logo.png'
 
 for option, default_value in configs.items():
     if w.config_get_plugin(option) == "":
         if configs[option] == REQUIRED:
             w.prnt("", w.prefix("error") +
-                   "pushbullet: Please set option: %s" % option)
+                   "join: Please set option: %s" % option)
             if type(default_value) == "str":
-                w.prnt("", "pushbullet: /set plugins.var.python.weebullet.%s STRING" % option)
+                w.prnt("", "join: /set plugins.var.python.weejoin.%s STRING" % option)
             elif type(default_value) == "int":
-                w.prnt("", "pushbullet: /set plugins.var.python.weebullet.%s INT" % option)
+                w.prnt("", "join: /set plugins.var.python.weejoin.%s INT" % option)
             else:
-                w.prnt("", "pushbullet: /set plugins.var.python.weebullet.%s VALUE" % option)
+                w.prnt("", "join: /set plugins.var.python.weejoin.%s VALUE" % option)
         else:
             w.config_set_plugin(option, configs[option])
 
 
 def debug(msg):
     if str(w.config_get_plugin("debug")) is not "0":
-        w.prnt("", "[weebullet] DEBUG: %s" % str(msg))
+        w.prnt("", "[weejoin] DEBUG: %s" % str(msg))
 
 
 def process_devicelist_cb(data, url, status, response, err):
     try:
-        devices = json.loads(response)["devices"]
+        devices = json.loads(response)["records"]
         w.prnt("", "Device List:")
         for device in devices:
-            if device["pushable"]:
-                if "nickname" in device:
-                    w.prnt("", "---\n%s" % device["nickname"])
-                else:
-                    w.prnt("", "---\nUnnamed")
-                w.prnt("", "%s" % device["iden"])
+            if "deviceName" in device:
+                w.prnt("", "---\n%s" % device["deviceName"])
+            else:
+                w.prnt("", "---\nUnnamed")
+            w.prnt("", "%s" % device["id"])
     except KeyError:
-        w.prnt("", "[weebullet] Error accessing device list: %s" % response)
+        w.prnt("", "[weejoin] Error accessing device list: %s" % response)
         return w.WEECHAT_RC_ERROR
     return w.WEECHAT_RC_OK
 
@@ -133,29 +135,29 @@ def cmd_help(data, buffer, args):
         w.prnt("", "Ignored channels: %s" % w.config_get_plugin("ignored_channels"))
     elif(args == "listdevices"):
         apikey = w.string_eval_expression(w.config_get_plugin("api_key"), {}, {}, {})
-        apiurl = "https://%s@api.pushbullet.com/v2/devices" % (apikey)
+        apiurl = "https://joinjoaomgcd.appspot.com/_ah/api/registration/v1/listDevices?apikey=%s" % (apikey)
         w.hook_process("url:" + apiurl, 20000, "process_devicelist_cb", "")
     else:
         w.prnt("", """
-Weebullet requires an API key from your Pushbullet account to work. Set your API key with (evaluated):
-    /set plugins.var.python.weebullet.api_key <KEY>
+WeeJoin requires an API key from your Join account to work. Set your API key with (evaluated):
+    /set plugins.var.python.weejoin.api_key <KEY>
 
-Weebullet will by default only send notifications when you are marked away on IRC. You can change this with:
-    /set plugins.var.python.weebullet.away_only [0|1]
+WeeJoin will by default only send notifications when you are marked away on IRC. You can change this with:
+    /set plugins.var.python.weejoin.away_only [0|1]
 
-Weebullet will by default send to all devices associated with your Pushbullet account. You can change this with:
-    /set plugins.var.python.weebullet.device_iden <ID>
+WeeJoin will by default send to all devices associated with your Join account. You can change this with:
+    /set plugins.var.python.weejoin.device_iden <ID>
 
-Weebullet can ignore repeated notifications if they arrive too often.  You can set this with (0 or blank to disable):
-    /set plugins.var.python.weebullet.min_notify_interval <NUMBER>
+WeeJoin can ignore repeated notifications if they arrive too often.  You can set this with (0 or blank to disable):
+    /set plugins.var.python.weejoin.min_notify_interval <NUMBER>
 
-You can get a list of your devices from the Pushbullet website, or by using
-    /weebullet listdevices
+You can get a list of your devices from the Join website, or by using
+    /weejoin listdevices
 """)
     return w.WEECHAT_RC_OK
 
 
-def process_pushbullet_cb(data, url, status, response, err):
+def process_join_cb(data, url, status, response, err):
     body = None
     headers = {}
     lines = response.rstrip().splitlines()
@@ -172,14 +174,14 @@ def process_pushbullet_cb(data, url, status, response, err):
 
     # response is the string of http body
     if status == w.WEECHAT_HOOK_PROCESS_ERROR:
-        w.prnt("", "[weebullet] Error sending to pushbullet: %s - %s" % (status, url))
+        w.prnt("", "[weejoin] Error sending to join: %s - %s" % (status, url))
         return w.WEECHAT_RC_ERROR
 
     if status_code is 401 or status_code is 403:
-        w.prnt("", "[weebullet] Invalid API Token: %s" % (w.string_eval_expression(w.config_get_plugin("api_key"), {}, {}, {})))
+        w.prnt("", "[weejoin] Invalid API Token: %s" % (w.string_eval_expression(w.config_get_plugin("api_key"), {}, {}, {})))
         return w.WEECHAT_RC_ERROR
     if status_code is not 200:
-        w.prnt("", "[weebullet] Error sending to pushbullet: %s - %s - %s" % (url, status_code, body))
+        w.prnt("", "[weejoin] Error sending to join: %s - %s - %s" % (url, status_code, body))
         return w.WEECHAT_RC_ERROR
 
     return w.WEECHAT_RC_OK
@@ -221,21 +223,23 @@ def send_push(title, body):
     debug("Sending push.  Title: [%s], body: [%s]" % (title, body))
 
     apikey = w.string_eval_expression(w.config_get_plugin("api_key"), {}, {}, {})
-    apiurl = "https://%s@api.pushbullet.com/v2/pushes" % (apikey)
+    apiurl = "https://joinjoaomgcd.appspot.com/_ah/api/messaging/v1/sendPush?apikey=%s" % (apikey)
     timeout = 20000  # FIXME - actually use config
     if len(title) is not 0 or len(body) is not 0:
         deviceiden = w.config_get_plugin("device_iden")
         if deviceiden == "all":
-            payload = urllib.urlencode({'type': 'note', 'title': title, 'body': body.encode('utf-8')})
+            payload = urllib.parse.urlencode({'title': title, 'text': body, 'deviceId': 'group.all', 'icon': notification_icon})
+            debug("Full Payload: %s%s" % (apiurl, payload))
         else:
-            payload = urllib.urlencode({'type': 'note', 'title': title, 'body': body.encode('utf-8'), 'device_iden': deviceiden})
-        w.hook_process_hashtable("url:" + apiurl, {"postfields": payload, "header": "1"}, timeout, "process_pushbullet_cb", "")
+            payload = urllib.parse.urlencode({'title': title, 'text': body, 'deviceId': deviceiden, 'icon': notification_icon})
+            debug("Full Payload: %s%s" % (apiurl, payload))
+        w.hook_process_hashtable("url:" + apiurl, {"postfields": payload, "header": "1"}, timeout, "process_join_cb", "")
 
 
 def cmd_send_push_note(data, buffer, args):
     send_push(
         title="Manual Notification from weechat",
-        body=args.decode('utf-8'))
+        body=args)
     return w.WEECHAT_RC_OK
 
 
@@ -263,10 +267,7 @@ def priv_msg_cb(data, bufferp, uber_empty,
                   "skipping notification")
             return w.WEECHAT_RC_OK
 
-    notif_body = u"<%s> %s" % (
-        prefix.decode('utf-8'),
-        message.decode('utf-8')
-    )
+    notif_body = u"<%s> %s" % (prefix, message)
 
     # Check that it's in a "/q" buffer and that I'm not the one writing the msg
     is_pm = w.buffer_get_string(bufferp, "localvar_type") == "private"
@@ -274,7 +275,7 @@ def priv_msg_cb(data, bufferp, uber_empty,
     # PM (query)
     if (is_pm and is_notify_private):
         send_push(
-            title="Privmsg from %s" % prefix.decode('utf-8'),
+            title="Privmsg from %s" % prefix,
             body=notif_body
         )
 
@@ -287,10 +288,10 @@ def priv_msg_cb(data, bufferp, uber_empty,
 
         if bufname not in ignored_channels:
             send_push(
-                title="Highlight in %s" % bufname.decode('utf-8'),
+                title="Highlight in %s" % bufname,
                 body=notif_body
             )
         else:
-            debug("[weebullet] Ignored channel, skipping notification in %s" % bufname.decode('utf-8'))
+            debug("[weejoin] Ignored channel, skipping notification in %s" % bufname)
 
     return w.WEECHAT_RC_OK
