@@ -59,7 +59,7 @@ configs = {
 
 last_notification = 0   # 0 seconds from the epoch
 # Icon used by Join for notification icon
-notification_icon = 'https://upload.wikimedia.org/wikipedia/commons/thumb/a/a3/Weechat_logo.png/64px-Weechat_logo.png'
+notification_icon = 'https://weechat.org/media/images/weechat_logo_small.png'
 
 for option, default_value in configs.items():
     if w.config_get_plugin(option) == "":
