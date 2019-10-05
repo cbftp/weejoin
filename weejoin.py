@@ -1,4 +1,6 @@
-#!/usr/bin/env python
+# weejoin
+# KittyKatt (kittykatt@teknik.io)
+# Released under the BSD license.
 # vim: set fileencoding=utf8 ts=4 sw=4 expandtab :
 
 import json
