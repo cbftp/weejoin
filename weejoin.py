@@ -79,7 +79,7 @@ for option, default_value in configs.items():
 
 
 def debug(msg):
-    if str(w.config_get_plugin("debug")) is not "0":
+    if str(w.config_get_plugin("debug")) != "0":
         w.prnt("", "[weejoin] DEBUG: %s" % str(msg))
 
 
@@ -179,10 +179,10 @@ def process_join_cb(data, url, status, response, err):
         w.prnt("", "[weejoin] Error sending to join: %s - %s" % (status, url))
         return w.WEECHAT_RC_ERROR
 
-    if status_code is 401 or status_code is 403:
+    if status_code == 401 or status_code == 403:
         w.prnt("", "[weejoin] Invalid API Token: %s" % (w.string_eval_expression(w.config_get_plugin("api_key"), {}, {}, {})))
         return w.WEECHAT_RC_ERROR
-    if status_code is not 200:
+    if status_code != 200:
         w.prnt("", "[weejoin] Error sending to join: %s - %s - %s" % (url, status_code, body))
         return w.WEECHAT_RC_ERROR
 
@@ -227,7 +227,7 @@ def send_push(title, body):
     apikey = w.string_eval_expression(w.config_get_plugin("api_key"), {}, {}, {})
     apiurl = "https://joinjoaomgcd.appspot.com/_ah/api/messaging/v1/sendPush?apikey=%s" % (apikey)
     timeout = 20000  # FIXME - actually use config
-    if len(title) is not 0 or len(body) is not 0:
+    if len(title) != 0 or len(body) != 0:
         deviceiden = w.config_get_plugin("device_iden")
         if deviceiden == "all":
             payload = urllib.parse.urlencode({'title': title, 'text': body, 'deviceId': 'group.all', 'icon': notification_icon})
